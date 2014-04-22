@@ -1,0 +1,312 @@
+<?php
+
+/**
+ * @file
+ * Module for work with service liqpay. Module uc_oplata add in ubercart new type payment.
+ */
+if (!defined(' __DIR__')) {
+    define(' __DIR__', dirname(__FILE__));
+}
+
+if (isset($_GET["OplataTesting"]) && $_GET["OplataTesting"] == 1) {
+    ini_set('display_errors', true);
+    error_reporting(E_ALL);
+}
+
+include_once(__DIR__ . '/class/oplata.cls.php');
+
+/**
+ * Implements hook_permisson().
+ */
+function uc_oplata_permission()
+{
+    return array('administer uc_oplata' => array('title' => t('Administer Oplata Payment Gateway'),
+                                                 'description' => t('Change admin settings'),),);
+}
+
+/**
+ * Implements hook_menu().
+ */
+function uc_oplata_menu()
+{
+    $items = array();
+    $items['admin/store/settings/oplata'] = array('title' => 'Oplata',
+                                                  'page callback' => 'drupal_get_form',
+                                                  'page arguments' => array('uc_oplata_list'),
+                                                  'access arguments' => array('administer uc_oplata'),
+                                                  'type' => MENU_NORMAL_ITEM,);
+
+    $items['oplata/back_url'] = array('title' => 'Oplata processing',
+                                      'page callback' => 'uc_oplata_back_url',
+                                      'access callback' => TRUE,
+                                      'type' => MENU_CALLBACK);
+
+    return $items;
+}
+
+/**
+ * Implements hook_uc_payment_method().
+ */
+function uc_oplata_uc_payment_method()
+{
+    $methods = array();
+    $methods['oplata'] = array('id' => 'oplata',
+                               'name' => t('Oplata'),
+                               'title' => theme('uc_oplata_payment_method_title'),
+                               'desc' => t('Redirect to oplata to pay by.'),
+                               'callback' => 'uc_payment_method_oplata',
+                               'weight' => 4,
+                               'checkout' => TRUE,
+                               'no_gateway' => TRUE,);
+    return $methods;
+}
+
+#--------------------------------------------------------------------------------------------------
+#==================================================================================================
+#-------------------OK-----------------------------------------------------------------------------
+
+/**
+ * Adds Oplata settings to the payment method settings form.
+ *
+ * @see uc_oplata_uc_payment_method
+ */
+function uc_payment_method_oplata($op, &$order, $form = NULL, &$form_state = NULL)
+{
+    switch ($op) {
+        case 'settings':
+            $form = uc_oplata_list($form, $form_state);
+            unset($form['submit']);
+            $form['#submit'][] = 'uc_oplata_list_submit';
+            return $form;
+    }
+}
+
+/**
+ * Callback for oplata payment page settings
+ */
+function uc_oplata_list($form, &$form_state)
+{
+    $form = array();
+    $curType = array('UAH' => 'Украинская гривна',
+                     'RUB' => 'Российский рубль',
+                     'USD' => 'Доллар США',
+                     'EUR' => 'Евро');
+    $languages = array('ru' => 'Русский',
+                       'uk' => 'Украинский',
+                       'en' => 'Английский');
+
+    $data = db_select('uc_oplata_rates', 'ulr')->fields('ulr', array('merchant_id',
+                                                                     'secret_key',
+                                                                     'currency',
+                                                                     'back_url',
+                                                                     'language',))->execute()->fetchObject();
+
+    $form['bmerch'] = array('#type' => 'hidden',
+                            '#value' => @$data->merchant_id);
+
+    $form['merchant_id'] = array('#type' => 'textfield',
+                                 '#title' => t('Merchant ID'),
+                                 '#default_value' => @$data->merchant_id,
+                                 '#size' => 40,
+                                 '#maxlength' => 100,
+                                 '#required' => TRUE);
+
+    $form['secret_key'] = array('#type' => 'textfield',
+                                '#title' => t('Secret key'),
+                                '#default_value' => @$data->secret_key,
+                                '#size' => 40,
+                                '#maxlength' => 100,
+                                '#required' => TRUE);
+    $form['currency'] = array('#type' => 'select',
+                              '#title' => t('Currency'),
+                              '#default_value' => @$data->currency,
+                              '#options' => $curType,
+                              '#description' => t("Please, select currency."),
+                              '#required' => TRUE,);
+    $form['back_url'] = array('#type' => 'textfield',
+                              '#title' => t('Back refference'),
+                              '#default_value' => @$data->back_url,
+                              '#description' => t("You can use http://{domain}/uc_oplata/back_url"),
+                              '#size' => 60,
+                              '#maxlength' => 255,
+                              '#required' => FALSE);
+    $form['language'] = array('#type' => 'select',
+                              '#title' => t('LANGUAGE'),
+                              '#default_value' => @$data->language,
+                              '#description' => t("Choose language of payment page"),
+                              '#options' => $languages,
+                              '#required' => FALSE);
+    $form['submit'] = array('#type' => 'submit',
+                            '#value' => t('Submit settings'),);
+
+    return $form;
+}
+
+
+function uc_oplata_list_submit($form, &$form_state)
+{
+
+    db_delete('uc_oplata_rates')->condition('merchant_id', $form_state['values']['bmerch'])->execute();
+
+    db_insert('uc_oplata_rates')->fields(array('merchant_id' => $form_state['values']['merchant_id'],
+                                               'secret_key' => $form_state['values']['secret_key'],
+                                               'currency' => $form_state['values']['currency'],
+                                               'back_url' => $form_state['values']['back_url'],
+                                               'language' => $form_state['values']['language']))->execute();
+
+    drupal_set_message(t('You successfully saved'));
+}
+
+
+#--------------------OK----------------------------------------------------------------------------
+#==================================================================================================
+#--------------------------------------------------------------------------------------------------
+
+
+/**
+ * Implements hook_theme().
+ */
+function uc_oplata_theme($existing, $type, $theme, $path)
+{
+    return array('uc_oplata_payment_method_title' => array('variables' => array(),));
+}
+
+/**
+ * Returns HTML for payment method title
+ *
+ * @ingroup themeable
+ */
+function theme_uc_oplata_payment_method_title()
+{
+    $path = base_path() . drupal_get_path('module', 'uc_oplata') . '/images/oplata.png';
+    $title = t('Oplata');
+    $title .= '<br />';
+    $attr = array('path' => $path,
+                  'alt' => 'Oplata Payment Gateway',
+                  'attributes' => array('class' => 'oplata-title-image'));
+    $title .= theme_image($attr);
+    return $title;
+}
+
+
+#--------------------------------------------------------------------------------------------------
+#==================================================================================================
+#--------------------------------------------------------------------------------------------------
+
+
+/**
+ * Implements hook_form_alter().
+ */
+function uc_oplata_form_alter(&$form, &$form_state, $form_id)
+{
+    if ($form_id == 'uc_cart_checkout_review_form') {
+        $order = $form_state['uc_order'];
+        if ($order->payment_method == 'oplata') {
+            unset($form['actions']['submit']);
+            $form['#prefix'] = '<table ><tr><td>';
+            $form['#suffix'] = '</td><td>' . drupal_render(drupal_get_form('uc_oplata_submit_form', $order)) . '</td></tr></table>';
+        }
+    }
+}
+
+
+#--------------------------------------------------------------------------------------------------
+#==================================================================================================
+#--------------------------------------------------------------------------------------------------
+
+function getOplataSettings()
+{
+    return db_select('uc_oplata_rates', 'ulr')->fields('ulr', array('merchant_id',
+                                                                    'secret_key',
+                                                                    'currency',
+                                                                    'back_url',
+                                                                    'language'))->execute()->fetchObject();
+}
+
+
+function uc_oplata_submit_form($form, &$form_state, $order)
+{
+    $txnid_count = db_select('uc_oplata_transaction', 'ult')->fields('ult', array('txnid'))->condition('txnid', $order->order_id)->execute()->fetchField();
+
+    if ($txnid_count) {
+        db_update('uc_oplata_transaction')->fields(array('created' => $order->created,
+                                                         'status' => 0))->condition('txnid', $order->order_id)->execute();
+    } else {
+        $txnid = db_insert('uc_oplata_transaction')->fields(array('txnid' => $order->order_id,
+                                                                  'amount' => $order->order_total,
+                                                                  'description' => "",
+                                                                  'system' => "",
+                                                                  'created' => $order->created,
+                                                                  'status' => '0'))->execute();
+    }
+
+    $oplataSettings = getOplataSettings();
+    $amount = strpos("{$order->order_total}", ",") ? str_replace(",", "", "{$order->order_total}") : "{$order->order_total}00";
+    $dataSettings = array('order_id' => $order->order_id . Oplata::ORDER_SEPARATOR . time(),
+                          'merchant_id' => $oplataSettings->merchant_id,
+                          'order_desc' => 'Order description',
+                          'amount' => $amount,
+                          'currency' => $oplataSettings->currency,
+                          'server_callback_url' => $oplataSettings->back_url,
+                          'response_url' => $oplataSettings->back_url,
+                          'lang' => $oplataSettings->language,
+                          'sender_email' => drupal_substr($order->primary_email, 0, 50));
+
+    $dataSettings['signature'] = Oplata::getSignature($dataSettings, $oplataSettings->secret_key);
+
+    return generateForm($dataSettings, Oplata::URL);
+}
+
+function generateForm($data, $url = '')
+{
+    $form['#action'] = Oplata::URL;
+    foreach ($data as $k => $v) {
+        if (!is_array($v)) {
+            $form[$k] = array('#type' => 'hidden',
+                              '#value' => $v);
+        } else {
+            $i = 0;
+            foreach ($v as $val) {
+                $form[$k . '[' . $i++ . ']'] = array('#type' => 'hidden',
+                                                     '#value' => $val);
+            }
+        }
+    }
+
+        $form['submit'] = array('#type' => 'submit',
+                                '#value' => t('Pay'));
+
+    return $form;
+}
+
+
+/**
+ * Callback function with result.
+ */
+function uc_oplata_back_url()
+{
+    $oplataSettings = getOplataSettings();
+
+    if ($_POST['order_status'] != Oplata::ORDER_APPROVED && $_POST['order_status'] != Oplata::ORDER_PROCESSING) {
+
+        drupal_set_message(t("Your payment has been declined.
+                     Maybe internet payments on your card is prohibited.
+                     Or you have exceeded the card limit.
+                     Ways of solving problem:
+                     - unlock internet purchasing
+                     - increase card limit
+                     - try again in 1 hour
+                     - try another card"), 'warning');
+        drupal_goto('cart');
+    }
+
+    $paymentInfo = Oplata::isPaymentValid($oplataSettings, $_POST);
+    if ($paymentInfo === true) {
+        $_SESSION['uc_checkout'][$_SESSION['cart_order']]['do_complete'] = TRUE;
+        drupal_goto('cart/checkout/complete');
+    } else {
+        drupal_set_message($paymentInfo, 'warning');
+        drupal_goto('cart');
+    }
+
+}

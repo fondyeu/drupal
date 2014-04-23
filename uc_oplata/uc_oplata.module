@@ -283,7 +283,7 @@ function uc_oplata_back_url()
 {
     $oplataSettings = getOplataSettings();
 
-    if ($_POST['order_status'] != Oplata::ORDER_APPROVED && $_POST['order_status'] != Oplata::ORDER_PROCESSING) {
+    if ($_POST['order_status'] == Oplata::ORDER_DECLINED) {
 
         drupal_set_message(t("Your payment has been declined.
                      Maybe internet payments on your card is prohibited.

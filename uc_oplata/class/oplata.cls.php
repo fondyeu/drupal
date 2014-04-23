@@ -3,7 +3,7 @@
 class Oplata
 {
     const ORDER_APPROVED = 'approved';
-    const ORDER_PROCESSING = 'approved';
+    const ORDER_DECLINED = 'declined';
 
     const ORDER_SEPARATOR = '#';
 
@@ -59,20 +59,17 @@ class Oplata
 
     public static function isPaymentValid($oplataSettings, $response)
     {
-//        1) get $order by $_GET['order_id']
         list($orderId,) = explode(self::ORDER_SEPARATOR, $response['order_id']);
         $order = uc_order_load($orderId);
 
-        if ($order === FALSE || uc_order_status_data($order->order_status, 'state') != 'in_checkout') { // processing
+        if ($order === FALSE || uc_order_status_data($order->order_status, 'state') != 'in_checkout') {
             return t('An error has occurred during payment. Please contact us to ensure your order has submitted.');
         }
 
-//        2) validate merchant_id
         if ($oplataSettings->merchant_id != $response['merchant_id']) {
             return t('An error has occurred during payment. Merchant data is incorrect.');
         }
 
-//        3) build $dataSettings array and get signature
         $originalResponse = $response;
         foreach ($response as $k => $v) {
             if (!in_array($k, self::$responseFields)) {
@@ -84,10 +81,11 @@ class Oplata
             return t('An error has occurred during payment. Signature is not valid.');
         }
 
-//        4) update order data
         if (drupal_strtolower($originalResponse['sender_email']) !== drupal_strtolower($order->primary_email)) {
             uc_order_comment_save($order->order_id, 0, t('Customer used a different e-mail address during payment: !email', array('!email' => check_plain($originalResponse['sender_email']))), 'admin');
         }
+
+        uc_order_comment_save($order->order_id, 0, "Order status: {$response['order_status']}", 'admin');
 
         return true;
     }

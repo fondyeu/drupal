@@ -282,6 +282,7 @@ function generateForm($data, $url = '')
 function uc_oplata_back_url()
 {
     $oplataSettings = getOplataSettings();
+    list($orderId,) = explode(Oplata::ORDER_SEPARATOR, $_POST['order_id']);
 
     if ($_POST['order_status'] == Oplata::ORDER_DECLINED) {
 
@@ -293,16 +294,47 @@ function uc_oplata_back_url()
                      - increase card limit
                      - try again in 1 hour
                      - try another card"), 'warning');
+
+        // send email (declined)
+        drupal_mail('orderstatus', 'declined', $_POST['sender_email'], $oplataSettings->language);
+
+        uc_order_update_status($orderId, 'cancelled');
+
         drupal_goto('cart');
     }
 
     $paymentInfo = Oplata::isPaymentValid($oplataSettings, $_POST);
     if ($paymentInfo === true) {
+
+
+        if ($_POST['order_status'] != Oplata::ORDER_APPROVED) {
+            drupal_set_message(t('Your payment is processing. We will inform you about results.'), 'warning');
+            uc_order_update_status($orderId, 'processing');
+        } else {
+            drupal_mail('orderstatus', 'approved', $_POST['sender_email'], $oplataSettings->language);
+            uc_order_update_status($orderId, 'completed');
+        }
+
         $_SESSION['uc_checkout'][$_SESSION['cart_order']]['do_complete'] = TRUE;
         drupal_goto('cart/checkout/complete');
     } else {
         drupal_set_message($paymentInfo, 'warning');
         drupal_goto('cart');
     }
+}
 
+function orderstatus_mail($key, &$message, $params)
+{
+    switch($key) {
+        case 'approved':
+            $message['subject'] = t('Order approved.');
+            $message['body'][] = t("Your payment has been successfully handled.");
+            break;
+        case 'declined':
+            $message['subject'] = t('Order declined.');
+            $message['body'][] = t("Your payment has been declined.
+                                 Maybe internet payments on your card is prohibited.
+                                 Or you have exceeded the card limit.");
+            break;
+    }
 }

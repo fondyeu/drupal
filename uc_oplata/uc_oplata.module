@@ -298,7 +298,7 @@ function uc_oplata_back_url()
         // send email (declined)
         drupal_mail('orderstatus', 'declined', $_POST['sender_email'], $oplataSettings->language);
 
-        uc_order_update_status($orderId, 'cancelled');
+        uc_order_update_status($orderId, 'canceled');
 
         drupal_goto('cart');
     }

@@ -237,7 +237,7 @@ function uc_oplata_submit_form($form, &$form_state, $order)
     }
 
     $oplataSettings = getOplataSettings();
-    $amount = strpos("{$order->order_total}", ",") ? str_replace(",", "", "{$order->order_total}") : "{$order->order_total}00";
+    $amount = round($order->order_total * 100);
     $dataSettings = array('order_id' => $order->order_id . Oplata::ORDER_SEPARATOR . time(),
                           'merchant_id' => $oplataSettings->merchant_id,
                           'order_desc' => 'Order description',

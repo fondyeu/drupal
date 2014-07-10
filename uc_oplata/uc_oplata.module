@@ -2,18 +2,15 @@
 
 /**
  * @file
- * Module for work with service liqpay. Module uc_oplata add in ubercart new type payment.
+ * Module for work with service oplata. Module uc_oplata add in ubercart new type payment.
  */
-if (!defined(' __DIR__')) {
-    define(' __DIR__', dirname(__FILE__));
-}
 
 if (isset($_GET["OplataTesting"]) && $_GET["OplataTesting"] == 1) {
     ini_set('display_errors', true);
     error_reporting(E_ALL);
 }
 
-include_once(__DIR__ . '/class/oplata.cls.php');
+include_once(dirname(__FILE__) . '/class/oplata.cls.php');
 
 /**
  * Implements hook_permisson().
